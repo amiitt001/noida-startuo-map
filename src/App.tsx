@@ -22,9 +22,178 @@ import { startupService } from './services/startupService';
 import { founderService } from './services/founderService';
 import { investorService } from './services/investorService';
 import { areaService } from './services/areaService';
+import { Startup, Founder, Investor, Area } from './types';
+
+// Async profile wrapper components
+const StartupProfileView: React.FC<{
+  slug: string;
+  onSelectStartup: (slug: string) => void;
+  onSelectFounder: (slug: string) => void;
+  onNavigateArea: (areaSlug: string) => void;
+  onBack: () => void;
+}> = ({ slug, onSelectStartup, onSelectFounder, onNavigateArea, onBack }) => {
+  const [startup, setStartup] = useState<Startup | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    startupService
+      .getStartupBySlug(slug)
+      .then(setStartup)
+      .catch(() => setStartup(null))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-24 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B35]"></div>
+      </div>
+    );
+  }
+
+  if (!startup) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-[#030612]">Startup Not Found</h2>
+        <p className="text-sm text-[#545f72]">We couldn't find a startup matching "{slug}".</p>
+        <button onClick={onBack} className="px-4 py-2 bg-[#FF6B35] text-white text-xs font-semibold rounded-lg">
+          Back to Directory
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <StartupProfile
+      startup={startup}
+      onSelectStartup={onSelectStartup}
+      onSelectFounder={onSelectFounder}
+      onNavigateArea={onNavigateArea}
+      onBack={onBack}
+    />
+  );
+};
+
+const FounderProfileView: React.FC<{
+  slug: string;
+  onSelectStartup: (slug: string) => void;
+  onBack: () => void;
+}> = ({ slug, onSelectStartup, onBack }) => {
+  const [founder, setFounder] = useState<Founder | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    founderService
+      .getFounderBySlug(slug)
+      .then(setFounder)
+      .catch(() => setFounder(null))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-[1000px] mx-auto px-4 md:px-10 py-24 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B35]"></div>
+      </div>
+    );
+  }
+
+  if (!founder) {
+    return (
+      <div className="w-full max-w-[1000px] mx-auto px-4 md:px-10 py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-[#030612]">Founder Not Found</h2>
+        <button onClick={onBack} className="px-4 py-2 bg-[#FF6B35] text-white text-xs font-semibold rounded-lg">
+          Back to Founders
+        </button>
+      </div>
+    );
+  }
+
+  return <FounderProfile founder={founder} onSelectStartup={onSelectStartup} onBack={onBack} />;
+};
+
+const InvestorProfileView: React.FC<{
+  slug: string;
+  onSelectStartup: (slug: string) => void;
+  onBack: () => void;
+}> = ({ slug, onSelectStartup, onBack }) => {
+  const [investor, setInvestor] = useState<Investor | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    investorService
+      .getInvestorBySlug(slug)
+      .then(setInvestor)
+      .catch(() => setInvestor(null))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-[1000px] mx-auto px-4 md:px-10 py-24 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B35]"></div>
+      </div>
+    );
+  }
+
+  if (!investor) {
+    return (
+      <div className="w-full max-w-[1000px] mx-auto px-4 md:px-10 py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-[#030612]">Investor Not Found</h2>
+        <button onClick={onBack} className="px-4 py-2 bg-[#FF6B35] text-white text-xs font-semibold rounded-lg">
+          Back to Investors
+        </button>
+      </div>
+    );
+  }
+
+  return <InvestorProfile investor={investor} onSelectStartup={onSelectStartup} onBack={onBack} />;
+};
+
+const AreaPageView: React.FC<{
+  slug: string;
+  onSelectStartup: (slug: string) => void;
+  onExploreMap: () => void;
+  onBack: () => void;
+}> = ({ slug, onSelectStartup, onExploreMap, onBack }) => {
+  const [area, setArea] = useState<Area | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    areaService
+      .getAreaBySlug(slug)
+      .then(setArea)
+      .catch(() => setArea(null))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-24 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B35]"></div>
+      </div>
+    );
+  }
+
+  if (!area) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-[#030612]">Area Not Found</h2>
+        <button onClick={onBack} className="px-4 py-2 bg-[#FF6B35] text-white text-xs font-semibold rounded-lg">
+          Back to Startups
+        </button>
+      </div>
+    );
+  }
+
+  return <AreaPage area={area} onSelectStartup={onSelectStartup} onExploreMap={onExploreMap} onBack={onBack} />;
+};
 
 export function App() {
-  // Simple client-side router state from window.location.pathname or internal state
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return window.location.pathname || '/';
   });
@@ -33,7 +202,6 @@ export function App() {
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
 
-  // Synchronize browser history
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, '', path);
     setCurrentPath(path);
@@ -48,84 +216,65 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Keyboard shortcut for Cmd+K Search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setIsSearchOpen(prev => !prev);
+        setIsSearchOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Match routes
   const renderRoute = () => {
-    // 1. Startup Deep Dive: /startups/:slug
     if (currentPath.startsWith('/startups/') && currentPath.length > '/startups/'.length) {
       const slug = currentPath.replace('/startups/', '');
-      const startup = startupService.getStartupBySlug(slug);
-      if (startup) {
-        return (
-          <StartupProfile
-            startup={startup}
-            onSelectStartup={(s) => navigate(`/startups/${s}`)}
-            onSelectFounder={(f) => navigate(`/founders/${f}`)}
-            onNavigateArea={(a) => navigate(`/areas/${a}`)}
-            onBack={() => navigate('/startups')}
-          />
-        );
-      }
+      return (
+        <StartupProfileView
+          slug={slug}
+          onSelectStartup={(s) => navigate(`/startups/${s}`)}
+          onSelectFounder={(f) => navigate(`/founders/${f}`)}
+          onNavigateArea={(a) => navigate(`/areas/${a}`)}
+          onBack={() => navigate('/startups')}
+        />
+      );
     }
 
-    // 2. Founder Deep Dive: /founders/:slug
     if (currentPath.startsWith('/founders/') && currentPath.length > '/founders/'.length) {
       const slug = currentPath.replace('/founders/', '');
-      const founder = founderService.getFounderBySlug(slug);
-      if (founder) {
-        return (
-          <FounderProfile
-            founder={founder}
-            onSelectStartup={(s) => navigate(`/startups/${s}`)}
-            onBack={() => navigate('/founders')}
-          />
-        );
-      }
+      return (
+        <FounderProfileView
+          slug={slug}
+          onSelectStartup={(s) => navigate(`/startups/${s}`)}
+          onBack={() => navigate('/founders')}
+        />
+      );
     }
 
-    // 3. Investor Deep Dive: /investors/:slug
     if (currentPath.startsWith('/investors/') && currentPath.length > '/investors/'.length) {
       const slug = currentPath.replace('/investors/', '');
-      const investor = investorService.getInvestorBySlug(slug);
-      if (investor) {
-        return (
-          <InvestorProfile
-            investor={investor}
-            onSelectStartup={(s) => navigate(`/startups/${s}`)}
-            onBack={() => navigate('/investors')}
-          />
-        );
-      }
+      return (
+        <InvestorProfileView
+          slug={slug}
+          onSelectStartup={(s) => navigate(`/startups/${s}`)}
+          onBack={() => navigate('/investors')}
+        />
+      );
     }
 
-    // 4. Area Hub: /areas/:slug
     if (currentPath.startsWith('/areas/') && currentPath.length > '/areas/'.length) {
       const slug = currentPath.replace('/areas/', '');
-      const area = areaService.getAreaById(slug) || areaService.getAllAreas().find(a => a.slug === slug);
-      if (area) {
-        return (
-          <AreaPage
-            area={area}
-            onSelectStartup={(s) => navigate(`/startups/${s}`)}
-            onExploreMap={() => navigate('/explore')}
-            onBack={() => navigate('/startups')}
-          />
-        );
-      }
+      return (
+        <AreaPageView
+          slug={slug}
+          onSelectStartup={(s) => navigate(`/startups/${s}`)}
+          onExploreMap={() => navigate('/explore')}
+          onBack={() => navigate('/startups')}
+        />
+      );
     }
 
-    // Standard static routes
     switch (currentPath) {
       case '/startups':
         return (
@@ -152,17 +301,13 @@ export function App() {
         );
 
       case '/jobs':
-        return (
-          <JobBoard
-            onSelectStartup={(slug) => navigate(`/startups/${slug}`)}
-          />
-        );
+        return <JobBoard onSelectStartup={(slug) => navigate(`/startups/${slug}`)} />;
 
       case '/ecosystem':
         return (
           <EcosystemAnalytics
-            onSelectSector={(sec) => navigate('/startups')}
-            onSelectArea={(areaName) => navigate('/startups')}
+            onSelectSector={(_sec) => navigate('/startups')}
+            onSelectArea={(_areaName) => navigate('/startups')}
             onNavigateStartups={() => navigate('/startups')}
           />
         );
@@ -188,7 +333,6 @@ export function App() {
       case '/':
       case '/explore':
       default:
-        // Interactive Startup Map (The Primary Hero Feature)
         return (
           <StartupMap
             onSelectStartup={(slug) => navigate(`/startups/${slug}`)}
@@ -204,8 +348,7 @@ export function App() {
   const isMapRoute = currentPath === '/' || currentPath === '/explore';
 
   return (
-    <div className="min-h-screen bg-[#fcf8f9] text-[#1c1b1c] flex flex-col font-sans selection:bg-[#FF6B35] selection:text-white">
-      {/* Top Navigation */}
+    <div className="min-h-screen bg-[#fcf8f9] text-[#1c1b1c] flex flex-col font-sans selection:bg-[#FF6B35] selection:text-[#ffffff]">
       <Navbar
         currentRoute={currentPath}
         onNavigate={navigate}
@@ -213,43 +356,18 @@ export function App() {
         onOpenSubmit={() => setIsSubmitOpen(true)}
       />
 
-      {/* Main View Body */}
-      <main className="flex-1 pt-16">
-        {renderRoute()}
-      </main>
+      <main className="flex-1 pt-16">{renderRoute()}</main>
 
-      {/* Footer (Rendered on non-map screens to prevent map occlusion) */}
       {!isMapRoute && (
-        <Footer
-          onNavigate={navigate}
-          onOpenSubmit={() => setIsSubmitOpen(true)}
-        />
+        <Footer onNavigate={navigate} onOpenSubmit={() => setIsSubmitOpen(true)} />
       )}
 
-      {/* Mobile Navigation Dock */}
-      <MobileNav
-        currentRoute={currentPath}
-        onNavigate={navigate}
-        onOpenMore={() => setIsMoreOpen(true)}
-      />
+      <MobileNav currentRoute={currentPath} onNavigate={navigate} onOpenMore={() => setIsMoreOpen(true)} />
 
-      {/* Search Modal */}
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onNavigate={navigate}
-      />
+      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} onNavigate={navigate} />
 
-      {/* Submit Startup Modal */}
-      <SubmitModal
-        isOpen={isSubmitOpen}
-        onClose={() => setIsSubmitOpen(false)}
-        onSubmitted={() => {
-          // Stay on current or go to directory
-        }}
-      />
+      <SubmitModal isOpen={isSubmitOpen} onClose={() => setIsSubmitOpen(false)} />
 
-      {/* Mobile More Drawer */}
       <MoreDrawer
         isOpen={isMoreOpen}
         onClose={() => setIsMoreOpen(false)}

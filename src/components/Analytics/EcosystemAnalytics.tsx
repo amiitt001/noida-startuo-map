@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { analyticsService } from '../../services/analyticsService';
+import { EcosystemStats } from '../../types';
 
 interface EcosystemAnalyticsProps {
   onSelectSector?: (sector: string) => void;
@@ -12,9 +13,34 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
   onSelectArea,
   onNavigateStartups,
 }) => {
-  const stats = useMemo(() => analyticsService.getEcosystemStats(), []);
+  const [stats, setStats] = useState<EcosystemStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const maxFundingYear = Math.max(...stats.fundingTimeline.map(t => t.amountMillions));
+  useEffect(() => {
+    analyticsService
+      .getEcosystemStats()
+      .then(setStats)
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-24 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B35]"></div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-24 text-center text-sm text-gray-500">
+        Failed to load ecosystem analytics.
+      </div>
+    );
+  }
+
+  const maxFundingYear = Math.max(...(stats.fundingTimeline?.map((t) => t.amountMillions) || [100]), 1);
 
   return (
     <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-8 space-y-10">
@@ -42,11 +68,11 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
             <span className="material-symbols-outlined text-[#FF6B35] text-xl">rocket_launch</span>
           </div>
           <div className="font-h2 text-3xl font-extrabold text-[#030612] mb-1">
-            {stats.totalStartups.toLocaleString()}+
+            {stats.totalStartups.toLocaleString()}
           </div>
           <span className="text-xs text-emerald-600 font-semibold flex items-center gap-0.5">
             <span className="material-symbols-outlined text-[14px]">trending_up</span>
-            +18% Year-over-Year
+            +{stats.yoyGrowthPercent ?? 18}% Year-over-Year
           </span>
         </div>
 
@@ -60,7 +86,7 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
           <div className="font-h2 text-3xl font-extrabold text-[#030612] mb-1">
             {stats.totalFundingDisclosed}
           </div>
-          <span className="text-xs text-[#545f72]">Across 220+ disclosed rounds</span>
+          <span className="text-xs text-[#545f72]">Across {stats.totalFundingRounds || 0} disclosed rounds</span>
         </div>
 
         <div className="bg-white border border-[#c6c6cc]/70 rounded-2xl p-5 shadow-sm">
@@ -71,9 +97,9 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
             <span className="material-symbols-outlined text-[#FF6B35] text-xl">group_add</span>
           </div>
           <div className="font-h2 text-3xl font-extrabold text-[#030612] mb-1">
-            {stats.hiringStartupsCount * 28}+
+            {stats.hiringStartupsCount}
           </div>
-          <span className="text-xs text-[#545f72]">{stats.totalJobs}+ Active Job Openings</span>
+          <span className="text-xs text-[#545f72]">{stats.totalJobs} Active Job Openings</span>
         </div>
 
         <div className="bg-white border border-[#c6c6cc]/70 rounded-2xl p-5 shadow-sm">
@@ -84,9 +110,9 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
             <span className="material-symbols-outlined text-[#FF6B35] text-xl">hub</span>
           </div>
           <div className="font-h2 text-3xl font-extrabold text-[#030612] mb-1">
-            {stats.totalIncubators}+
+            {stats.totalAreas || stats.totalIncubators}
           </div>
-          <span className="text-xs text-[#545f72]">Incubators & Accelerators</span>
+          <span className="text-xs text-[#545f72]">Geographic Hubs & Sectors</span>
         </div>
       </div>
 
@@ -129,11 +155,11 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
           </div>
 
           <div className="pt-4 mt-6 border-t border-[#c6c6cc]/40 flex justify-between items-center text-xs text-[#545f72]">
-            <span>Top cluster: Artificial Intelligence & Enterprise SaaS</span>
+            <span>Top cluster: {stats.topSectorCluster || 'AI / ML & SaaS'}</span>
             {onNavigateStartups && (
               <button
                 onClick={onNavigateStartups}
-                className="font-bold text-[#030612] hover:text-[#FF6B35] transition-colors"
+                className="font-bold text-[#030612] hover:text-[#FF6B35] transition-colors cursor-pointer"
               >
                 Browse Sector Directory →
               </button>
@@ -171,7 +197,7 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
           </div>
 
           <div className="pt-4 mt-6 border-t border-[#c6c6cc]/40 text-xs text-[#545f72] flex items-center justify-between">
-            <span>Strong early-stage funnel fueled by NCR engineering colleges</span>
+            <span>Funnel of {stats.totalStartups} companies across {stats.stageBreakdown.length} maturity stages</span>
           </div>
         </div>
       </div>
@@ -186,7 +212,7 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
               <p className="text-xs text-[#545f72]">Cumulative disclosed funding by investment year</p>
             </div>
             <span className="text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full">
-              Record High 2025
+              Peak Year {stats.peakFundingYear || 2025}
             </span>
           </div>
 
@@ -246,7 +272,7 @@ export const EcosystemAnalytics: React.FC<EcosystemAnalyticsProps> = ({
           </div>
 
           <div className="pt-3 border-t border-[#c6c6cc]/40 text-xs text-[#545f72]">
-            Expressway corridor (Sec 135–142) is highest growing sub-market.
+            {stats.topAreaHub || 'Sector 62'} is the primary startup hub in Noida.
           </div>
         </div>
       </div>

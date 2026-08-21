@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Area } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Area, Startup } from '../types';
 import { startupService } from '../services/startupService';
 import { StartupCard } from './StartupCard';
 
@@ -16,8 +16,13 @@ export const AreaPage: React.FC<AreaPageProps> = ({
   onExploreMap,
   onBack,
 }) => {
-  const startups = useMemo(() => startupService.getStartupsByArea(area.id), [area.id]);
-  const hiringCount = startups.filter(s => s.hiring).length;
+  const [startups, setStartups] = useState<Startup[]>([]);
+
+  useEffect(() => {
+    startupService.filterStartups({ area: area.id }).then((res) => setStartups(res.startups)).catch(() => setStartups([]));
+  }, [area.id]);
+
+  const hiringCount = startups.filter((s) => s.hiring).length;
 
   return (
     <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-8 space-y-8 animate-in fade-in duration-200">

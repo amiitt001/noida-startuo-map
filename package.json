@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "server:dev": "npm --prefix server run dev",
+    "server:build": "npm --prefix server run build",
+    "server:start": "npm --prefix server run start",
+    "test:api": "npm --prefix server run test",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -37,16 +37,26 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
       return;
     }
 
-    const startups = startupService.filterStartups({ search: debouncedSearch }, 1, 4).startups;
-    const founders = founderService.filterFounders({ search: debouncedSearch }).slice(0, 3);
-    const investors = investorService.filterInvestors(debouncedSearch).slice(0, 3);
-    const jobs = jobService.filterJobs({ search: debouncedSearch }).slice(0, 3);
-    const areas = areaService.getAllAreas().filter(a => 
-      a.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      a.topSectors.some(s => s.toLowerCase().includes(debouncedSearch.toLowerCase()))
-    ).slice(0, 3);
+    let active = true;
 
-    setResults({ startups, founders, investors, jobs, areas });
+    Promise.all([
+      startupService.filterStartups({ search: debouncedSearch }, 1, 4).then((r) => r.startups).catch(() => []),
+      founderService.filterFounders({ search: debouncedSearch }).then((f) => f.slice(0, 3)).catch(() => []),
+      investorService.filterInvestors({ search: debouncedSearch }).then((i) => i.slice(0, 3)).catch(() => []),
+      jobService.filterJobs({ search: debouncedSearch }).then((j) => j.slice(0, 3)).catch(() => []),
+      areaService.getAllAreas().then((a) => a.filter((ar) =>
+        ar.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        ar.topSectors.some((s) => s.toLowerCase().includes(debouncedSearch.toLowerCase()))
+      ).slice(0, 3)).catch(() => []),
+    ]).then(([startups, founders, investors, jobs, areas]) => {
+      if (active) {
+        setResults({ startups, founders, investors, jobs, areas });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, [debouncedSearch]);
 
   if (!isOpen) return null;

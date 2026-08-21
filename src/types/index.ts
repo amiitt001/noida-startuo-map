@@ -222,6 +222,14 @@ export interface FounderFilterState {
   location: string;
 }
 
+export interface InvestorFilterState {
+  search: string;
+  type: string;
+  stage: string;
+}
+
+export type SubmissionFormData = Omit<Submission, 'id' | 'status' | 'submittedAt' | 'reviewedAt' | 'notes'>;
+
 export interface JobFilterState {
   search: string;
   role: string;
@@ -237,11 +245,51 @@ export interface EcosystemStats {
   totalFounders: number;
   totalInvestors: number;
   totalIncubators: number;
+  totalAreas?: number;
+  verifiedStartupsCount?: number;
   totalJobs: number;
   totalFundingDisclosed: string;
+  totalFundingRounds?: number;
   hiringStartupsCount: number;
+  yoyGrowthPercent?: number;
+  topSectorCluster?: string;
+  peakFundingYear?: number;
+  topAreaHub?: string;
   sectorBreakdown: { sector: SectorType; count: number; percentage: number }[];
   stageBreakdown: { stage: StartupStage; count: number; percentage: number }[];
   areaBreakdown: { areaName: string; count: number; hiringCount: number }[];
   fundingTimeline: { year: number; amountMillions: number; dealsCount: number }[];
+}
+
+export interface StartupFeatureProperties {
+  id: string;
+  slug: string;
+  name: string;
+  sector: string;
+  sectors?: string[];
+  stage: StartupStage;
+  type: StartupType;
+  area?: string;
+  areaName: string;
+  hiring: boolean;
+  verified: boolean;
+  logo: string;
+  tagline: string;
+  description: string;
+}
+
+export interface GeoJSONPointGeometry {
+  type: 'Point';
+  coordinates: [number, number];
+}
+
+export interface StartupGeoJSONFeature {
+  type: 'Feature';
+  geometry: GeoJSONPointGeometry;
+  properties: StartupFeatureProperties;
+}
+
+export interface StartupGeoJSONCollection {
+  type: 'FeatureCollection';
+  features: StartupGeoJSONFeature[];
 }

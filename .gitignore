@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+!server/.env.example
+# Local tools & runs
+strix_runs/
+graphify-out/
+agents.db
+

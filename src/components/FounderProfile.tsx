@@ -1,5 +1,5 @@
-import React from 'react';
-import { Founder } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Founder, Startup } from '../types';
 import { startupService } from '../services/startupService';
 import { useSaved } from '../hooks/useSaved';
 
@@ -16,7 +16,13 @@ export const FounderProfile: React.FC<FounderProfileProps> = ({
 }) => {
   const { isSaved, toggleSave } = useSaved();
   const saved = isSaved('founder', founder.id);
-  const startup = startupService.getStartupById(founder.startupId);
+  const [startup, setStartup] = useState<Startup | null>(null);
+
+  useEffect(() => {
+    if (founder.startupSlug) {
+      startupService.getStartupBySlug(founder.startupSlug).then(setStartup).catch(() => setStartup(null));
+    }
+  }, [founder.startupSlug]);
 
   return (
     <div className="w-full max-w-[1000px] mx-auto px-4 md:px-10 py-8 space-y-8 animate-in fade-in duration-200">

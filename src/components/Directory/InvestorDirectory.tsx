@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { investorService } from '../../services/investorService';
+import React, { useState } from 'react';
+import { useInvestors } from '../../hooks/useInvestors';
 import { InvestorCard } from '../InvestorCard';
 
 interface InvestorDirectoryProps {
@@ -14,12 +14,7 @@ export const InvestorDirectory: React.FC<InvestorDirectoryProps> = ({
   const [search, setSearch] = useState('');
   const [type, setType] = useState('all');
 
-  const investors = useMemo(() => {
-    return investorService.filterInvestors(
-      search,
-      type !== 'all' ? type : undefined
-    );
-  }, [search, type]);
+  const { investors, loading } = useInvestors(search, type !== 'all' ? type : undefined);
 
   return (
     <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-8 space-y-6 animate-in fade-in duration-200">

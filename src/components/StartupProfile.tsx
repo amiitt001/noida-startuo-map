@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Startup } from '../types';
 import { startupService } from '../services/startupService';
 import { jobService } from '../services/jobService';
@@ -24,8 +24,13 @@ export const StartupProfile: React.FC<StartupProfileProps> = ({
   const { isSaved, toggleSave } = useSaved();
   const saved = isSaved('startup', startup.id);
 
-  const jobs = useMemo(() => jobService.getJobsByStartup(startup.id), [startup.id]);
-  const similarStartups = useMemo(() => startupService.getSimilarStartups(startup, 3), [startup]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [similarStartups, setSimilarStartups] = useState<Startup[]>([]);
+
+  useEffect(() => {
+    jobService.getJobsByStartup(startup.id).then(setJobs).catch(() => setJobs([]));
+    startupService.getSimilarStartups(startup.slug, 3).then(setSimilarStartups).catch(() => setSimilarStartups([]));
+  }, [startup.id, startup.slug]);
 
   return (
     <div className="w-full max-w-[1280px] mx-auto px-4 md:px-10 py-8 space-y-8 animate-in fade-in duration-200">

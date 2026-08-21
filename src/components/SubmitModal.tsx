@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { z } from 'zod';
 import { submissionService } from '../services/submissionService';
 import { StartupType, StartupStage, SectorType } from '../types';
-import { SEED_AREAS } from '../data/seedData';
+import { useAreas } from '../hooks/useAreas';
 
 interface SubmitModalProps {
   isOpen: boolean;
@@ -45,6 +45,7 @@ const Step5Schema = z.object({
 });
 
 export const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, onSubmitted }) => {
+  const { areas } = useAreas();
   const [step, setStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -136,18 +137,22 @@ export const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, onSub
     setStep((prev) => Math.max(1, prev - 1));
   };
 
-  const handleSubmit = () => {
-    const selectedAreaObj = SEED_AREAS.find((a) => a.id === formData.areaId);
+  const handleSubmit = async () => {
+    const selectedAreaObj = areas.find((a) => a.id === formData.areaId);
     const areaName = selectedAreaObj ? `${selectedAreaObj.name}, ${selectedAreaObj.city}` : 'Sector 62, Noida';
 
-    submissionService.createSubmission({
-      ...formData,
-      areaName,
-      foundedYear: Number(formData.foundedYear),
-    });
+    try {
+      await submissionService.addSubmission({
+        ...formData,
+        areaName,
+        foundedYear: Number(formData.foundedYear),
+      });
 
-    setIsSuccess(true);
-    if (onSubmitted) onSubmitted();
+      setIsSuccess(true);
+      if (onSubmitted) onSubmitted();
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit startup details');
+    }
   };
 
   return (
@@ -285,7 +290,7 @@ export const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, onSub
                       onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-[#c6c6cc] rounded-lg focus:border-[#FF6B35] focus:outline-none"
                     >
-                      {SEED_AREAS.map((a) => (
+                      {areas.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name} ({a.city})
                         </option>

@@ -1,50 +1,49 @@
+/**
+ * Founder Service
+ *
+ * Frontend service calling the Express API via apiClient.
+ */
+
+import { apiClient } from './apiClient';
 import { Founder, FounderFilterState } from '../types';
-import { SEED_FOUNDERS } from '../data/seedData';
-import { startupService } from './startupService';
 
 export const founderService = {
-  getAllFounders(): Founder[] {
-    return SEED_FOUNDERS;
+  async getAllFounders(): Promise<Founder[]> {
+    const res = await apiClient.get<Founder[]>('/api/founders');
+    return res.data;
   },
 
-  getFounderBySlug(slug: string): Founder | undefined {
-    const all = this.getAllFounders();
-    return all.find(f => f.slug.toLowerCase() === slug.toLowerCase());
+  async filterFounders(filters: Partial<FounderFilterState>): Promise<Founder[]> {
+    const params = new URLSearchParams();
+    if (filters.search?.trim()) params.set('search', filters.search.trim());
+    if (filters.sector && filters.sector !== 'all') params.set('sector', filters.sector);
+    if (filters.stage && filters.stage !== 'all') params.set('stage', filters.stage);
+    if (filters.location && filters.location !== 'all') params.set('location', filters.location);
+
+    const res = await apiClient.get<Founder[]>(`/api/founders?${params.toString()}`);
+    return res.data;
   },
 
-  getFoundersByStartup(startupId: string): Founder[] {
-    const all = this.getAllFounders();
-    return all.filter(f => f.startupId === startupId);
+  async getFounderBySlug(slug: string): Promise<Founder | null> {
+    try {
+      const res = await apiClient.get<Founder>(`/api/founders/${encodeURIComponent(slug)}`);
+      return res.data;
+    } catch (_err) {
+      return null;
+    }
   },
 
-  filterFounders(filters: Partial<FounderFilterState>): Founder[] {
-    let result = this.getAllFounders();
+  async createFounder(founderData: Omit<Founder, 'id' | 'slug'>): Promise<Founder> {
+    const res = await apiClient.post<Founder>('/api/admin/founders', founderData);
+    return res.data;
+  },
 
-    if (filters.search && filters.search.trim()) {
-      const q = filters.search.toLowerCase().trim();
-      result = result.filter(f =>
-        f.name.toLowerCase().includes(q) ||
-        f.startupName.toLowerCase().includes(q) ||
-        f.bio.toLowerCase().includes(q) ||
-        f.skills.some(sk => sk.toLowerCase().includes(q)) ||
-        f.sectors.some(sec => sec.toLowerCase().includes(q))
-      );
-    }
+  async updateFounder(id: string, updates: Partial<Founder>): Promise<Founder> {
+    const res = await apiClient.patch<Founder>(`/api/admin/founders/${id}`, updates);
+    return res.data;
+  },
 
-    if (filters.sector && filters.sector !== 'all' && filters.sector !== '') {
-      result = result.filter(f =>
-        f.sectors.some(sec => sec.toLowerCase() === filters.sector?.toLowerCase() || sec.toLowerCase().includes(filters.sector?.toLowerCase() || ''))
-      );
-    }
-
-    if (filters.stage && filters.stage !== 'all' && filters.stage !== '') {
-      result = result.filter(f => f.stage.toLowerCase() === filters.stage?.toLowerCase());
-    }
-
-    if (filters.location && filters.location !== 'all' && filters.location !== '') {
-      result = result.filter(f => f.location.toLowerCase().includes(filters.location?.toLowerCase() || ''));
-    }
-
-    return result;
-  }
+  async deleteFounder(id: string): Promise<void> {
+    await apiClient.delete(`/api/admin/founders/${id}`);
+  },
 };

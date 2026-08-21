@@ -1,6 +1,11 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { Startup, SectorType, StartupStage, Area } from '../../types';
+import {
+  StartupFilterState,
+  StartupFeatureProperties,
+  StartupGeoJSONCollection,
+  Area,
+} from '../../types';
 import { startupService } from '../../services/startupService';
 import { areaService } from '../../services/areaService';
 import { useSaved } from '../../hooks/useSaved';
@@ -20,11 +25,13 @@ export const StartupMap: React.FC<StartupMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<{ [key: string]: maplibregl.Marker }>({});
 
-  const [allStartups, setAllStartups] = useState<Startup[]>([]);
+  const [geojsonData, setGeojsonData] = useState<StartupGeoJSONCollection>({
+    type: 'FeatureCollection',
+    features: [],
+  });
   const [areas, setAreas] = useState<Area[]>([]);
-  const [selectedStartup, setSelectedStartup] = useState<Startup | null>(null);
+  const [selectedStartup, setSelectedStartup] = useState<StartupFeatureProperties | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterArea, setFilterArea] = useState<string>('all');
   const [filterSector, setFilterSector] = useState<string>('all');
@@ -34,62 +41,19 @@ export const StartupMap: React.FC<StartupMapProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showFilterDrawer, setShowFilterDrawer] = useState<boolean>(false);
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<'osm' | 'dark' | 'voyager'>('voyager');
 
   const { isSaved, toggleSave } = useSaved();
 
-  // Load initial data
+  // Load areas for filter dropdown
   useEffect(() => {
-    const list = startupService.getAllStartups();
-    setAllStartups(list);
-    setAreas(areaService.getAllAreas());
-
-    if (initialSelectedSlug) {
-      const found = list.find(s => s.slug === initialSelectedSlug);
-      if (found) setSelectedStartup(found);
-    }
-  }, [initialSelectedSlug]);
-
-  // Filtered startups list
-  const filteredStartups = useMemo(() => {
-    return allStartups.filter(s => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matches =
-          s.name.toLowerCase().includes(q) ||
-          s.tagline.toLowerCase().includes(q) ||
-          s.sectors.some(sec => sec.toLowerCase().includes(q)) ||
-          s.areaName.toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-      if (filterType !== 'all' && s.type.toLowerCase() !== filterType.toLowerCase()) return false;
-      if (filterArea !== 'all' && s.areaId !== filterArea && !s.areaName.toLowerCase().includes(filterArea.toLowerCase())) return false;
-      if (filterSector !== 'all' && !s.sectors.some(sec => sec.toLowerCase() === filterSector.toLowerCase())) return false;
-      if (filterStage !== 'all' && s.stage.toLowerCase() !== filterStage.toLowerCase()) return false;
-      if (hiringOnly && !s.hiring) return false;
-      if (verifiedOnly && !s.verified) return false;
-      return true;
-    });
-  }, [allStartups, searchQuery, filterType, filterArea, filterSector, filterStage, hiringOnly, verifiedOnly]);
-
-  // Sector icon helper
-  const getSectorIcon = (sector: SectorType | string) => {
-    const s = sector.toLowerCase();
-    if (s.includes('ai') || s.includes('ml')) return 'psychology';
-    if (s.includes('fintech')) return 'payments';
-    if (s.includes('deeptech') || s.includes('robotics')) return 'science';
-    if (s.includes('ev') || s.includes('climate')) return 'electric_bolt';
-    if (s.includes('edtech')) return 'school';
-    if (s.includes('health')) return 'medical_services';
-    if (s.includes('logistics') || s.includes('commerce')) return 'shopping_cart';
-    if (s.includes('cyber')) return 'shield';
-    if (s.includes('proptech')) return 'apartment';
-    return 'rocket_launch';
-  };
+    areaService.getAllAreas().then(setAreas).catch(() => {});
+  }, []);
 
   // Map Tile Style source URLs
   const getStyleObject = useCallback((style: 'osm' | 'dark' | 'voyager') => {
-    // High-quality OpenStreetMap and Carto tile endpoints (free, CORS-friendly, reliable)
     let tilesUrl = 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png';
     if (style === 'dark') {
       tilesUrl = 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png';
@@ -119,15 +83,120 @@ export const StartupMap: React.FC<StartupMapProps> = ({
     };
   }, []);
 
-  // Initialize MapLibre
+  // Setup native MapLibre GeoJSON source and cluster layers
+  const setupMapLayers = useCallback((map: maplibregl.Map, data: StartupGeoJSONCollection) => {
+    if (!map.getSource('startups')) {
+      map.addSource('startups', {
+        type: 'geojson',
+        data: data,
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      });
+    } else {
+      (map.getSource('startups') as maplibregl.GeoJSONSource).setData(data);
+    }
+
+    if (!map.getLayer('clusters')) {
+      map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'startups',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': [
+            'step',
+            ['get', 'point_count'],
+            '#FF6B35',
+            10,
+            '#1a1f2c',
+            30,
+            '#030612',
+          ],
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            18,
+            10,
+            24,
+            30,
+            30,
+          ],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+    }
+
+    if (!map.getLayer('cluster-count')) {
+      map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'startups',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          'text-size': 13,
+        },
+        paint: {
+          'text-color': '#ffffff',
+        },
+      });
+    }
+
+    if (!map.getLayer('unclustered-point')) {
+      map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'startups',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': '#ffffff',
+          'circle-radius': 9,
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#1a1f2c',
+        },
+      });
+    }
+
+    if (!map.getLayer('unclustered-point-selected')) {
+      map.addLayer({
+        id: 'unclustered-point-selected',
+        type: 'circle',
+        source: 'startups',
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'id'], '']],
+        paint: {
+          'circle-color': '#FF6B35',
+          'circle-radius': 12,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+    }
+  }, []);
+
+  // Update selection highlight layer filter
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    if (map.getLayer('unclustered-point-selected')) {
+      map.setFilter('unclustered-point-selected', [
+        'all',
+        ['!', ['has', 'point_count']],
+        ['==', ['get', 'id'], selectedStartup ? selectedStartup.id : ''],
+      ]);
+    }
+  }, [selectedStartup, mapLoaded]);
+
+  // Initialize MapLibre Map instance once
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Noida / Greater Noida bounding center
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: getStyleObject(mapStyle),
-      center: [77.3850, 28.5350], // Longitude, Latitude (Noida Center)
+      center: [77.3850, 28.5350], // Noida Center [longitude, latitude]
       zoom: 11.8,
       minZoom: 9,
       maxZoom: 18,
@@ -138,102 +207,157 @@ export const StartupMap: React.FC<StartupMapProps> = ({
 
     map.on('load', () => {
       setMapLoaded(true);
+      setupMapLayers(map, geojsonData);
     });
 
     map.addControl(
-      new maplibregl.AttributionControl({
-        compact: true,
-      }),
+      new maplibregl.AttributionControl({ compact: true }),
       'bottom-right'
     );
 
-    return () => {
-      map.remove();
+    // Click cluster to expand zoom
+    const handleClusterClick = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+      if (!features.length) return;
+      const clusterId = features[0].properties.cluster_id;
+      const source = map.getSource('startups') as maplibregl.GeoJSONSource;
+      if (!source) return;
+
+      source
+        .getClusterExpansionZoom(clusterId)
+        .then((zoom) => {
+          const coords = (features[0].geometry as GeoJSON.Point).coordinates;
+          map.easeTo({
+            center: [coords[0], coords[1]],
+            zoom: zoom,
+            duration: 500,
+          });
+        })
+        .catch(() => {});
     };
-  }, [getStyleObject, mapStyle]);
 
-  // Update Markers on filtered startups change
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+    // Click unclustered startup point to select it
+    const handlePointClick = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['unclustered-point'] });
+      if (!features || !features[0]) return;
+      const feature = features[0];
+      const props = feature.properties as StartupFeatureProperties;
+      const coords = (feature.geometry as GeoJSON.Point).coordinates;
 
-    // Clear existing markers
-    Object.values(markersRef.current).forEach((m: maplibregl.Marker) => m.remove());
-    markersRef.current = {};
+      setSelectedStartup(props);
 
-    // Group close coordinates or display markers
-    filteredStartups.forEach(startup => {
-      const isSelected = selectedStartup?.id === startup.id;
-      const primarySector = startup.sectors[0] || 'SaaS';
-      const iconName = getSectorIcon(primarySector);
-
-      // Create custom HTML element for marker
-      const el = document.createElement('div');
-      el.className = 'group cursor-pointer transform transition-all duration-200';
-      el.style.zIndex = isSelected ? '50' : '10';
-
-      const inner = document.createElement('div');
-      inner.className = `relative flex items-center justify-center transition-all ${
-        isSelected
-          ? 'w-12 h-12 rounded-full bg-[#1a1f2c] border-2 border-white shadow-xl scale-110 text-white'
-          : 'w-9 h-9 rounded-full bg-white border border-[#c6c6cc] shadow-md hover:scale-115 text-[#1a1f2c] hover:border-[#FF6B35]'
-      }`;
-
-      // Icon or pulse ring
-      if (isSelected) {
-        const pulse = document.createElement('div');
-        pulse.className = 'absolute -inset-1.5 rounded-full bg-[#FF6B35]/30 animate-ping pointer-events-none';
-        inner.appendChild(pulse);
-      }
-
-      const iconSpan = document.createElement('span');
-      iconSpan.className = 'material-symbols-outlined text-[18px] select-none';
-      if (isSelected) {
-        iconSpan.style.color = '#FF6B35';
-      }
-      iconSpan.innerText = iconName;
-      inner.appendChild(iconSpan);
-
-      // Hover Tooltip
-      const tooltip = document.createElement('div');
-      tooltip.className = 'absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1 bg-[#1a1f2c] text-white text-[11px] font-semibold rounded shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30';
-      tooltip.innerHTML = `${startup.name} <span class="text-[#FF6B35] font-normal">• ${primarySector}</span>`;
-      inner.appendChild(tooltip);
-
-      el.appendChild(inner);
-
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        setSelectedStartup(startup);
-        map.flyTo({
-          center: [startup.longitude, startup.latitude],
-          zoom: 14,
-          speed: 1.2,
-          curve: 1.4,
-          essential: true,
-        });
-      });
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([startup.longitude, startup.latitude])
-        .addTo(map);
-
-      markersRef.current[startup.id] = marker;
-    });
-  }, [filteredStartups, selectedStartup]);
-
-  // Handle fly to selected startup if prop changed
-  useEffect(() => {
-    if (selectedStartup && mapRef.current) {
-      mapRef.current.flyTo({
-        center: [selectedStartup.longitude, selectedStartup.latitude],
-        zoom: 14.2,
+      map.flyTo({
+        center: [coords[0], coords[1]],
+        zoom: 14.5,
         speed: 1.2,
+        curve: 1.4,
+        essential: true,
       });
-    }
-  }, [selectedStartup]);
+    };
 
-  // Map Controls Helpers
+    const handleMouseEnterCluster = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const handleMouseLeaveCluster = () => { map.getCanvas().style.cursor = ''; };
+    const handleMouseEnterPoint = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const handleMouseLeavePoint = () => { map.getCanvas().style.cursor = ''; };
+
+    map.on('click', 'clusters', handleClusterClick);
+    map.on('click', 'unclustered-point', handlePointClick);
+    map.on('mouseenter', 'clusters', handleMouseEnterCluster);
+    map.on('mouseleave', 'clusters', handleMouseLeaveCluster);
+    map.on('mouseenter', 'unclustered-point', handleMouseEnterPoint);
+    map.on('mouseleave', 'unclustered-point', handleMouseLeavePoint);
+
+    // Resize handler
+    const handleResize = () => {
+      map.resize();
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [getStyleObject, mapStyle, setupMapLayers]);
+
+  // Fetch GeoJSON data when filters change with AbortController
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setMapError(null);
+
+    const filters: Partial<StartupFilterState> = {
+      search: searchQuery,
+      type: filterType,
+      area: filterArea,
+      sector: filterSector,
+      stage: filterStage,
+      hiringOnly,
+      verifiedOnly,
+    };
+
+    startupService
+      .getGeoJSON(filters, controller.signal)
+      .then((data) => {
+        setGeojsonData(data);
+        setLoading(false);
+
+        // Update MapLibre source
+        const map = mapRef.current;
+        if (map) {
+          const updateSource = () => {
+            const source = map.getSource('startups') as maplibregl.GeoJSONSource;
+            if (source) {
+              source.setData(data);
+            } else if (map.isStyleLoaded()) {
+              setupMapLayers(map, data);
+            }
+          };
+
+          if (map.isStyleLoaded()) {
+            updateSource();
+          } else {
+            map.once('load', updateSource);
+          }
+        }
+
+        // Handle initialSelectedSlug if provided
+        if (initialSelectedSlug && data.features.length > 0) {
+          const found = data.features.find((f) => f.properties.slug === initialSelectedSlug);
+          if (found) {
+            setSelectedStartup(found.properties);
+            if (mapRef.current) {
+              mapRef.current.flyTo({
+                center: found.geometry.coordinates,
+                zoom: 14.5,
+                speed: 1.2,
+              });
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setLoading(false);
+        setMapError('Failed to load startup map data');
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    searchQuery,
+    filterType,
+    filterArea,
+    filterSector,
+    filterStage,
+    hiringOnly,
+    verifiedOnly,
+    initialSelectedSlug,
+    setupMapLayers,
+  ]);
+
+  // Map Controls
   const handleZoomIn = () => {
     mapRef.current?.zoomIn({ duration: 300 });
   };
@@ -255,11 +379,29 @@ export const StartupMap: React.FC<StartupMapProps> = ({
       {/* Map Container */}
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0" />
 
+      {/* Non-destructive Error Banner */}
+      {mapError && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-40 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg">
+          <span className="material-symbols-outlined text-sm">error</span>
+          <span>{mapError}</span>
+          <button
+            onClick={() => setFilterType('all')}
+            className="underline font-semibold ml-2 hover:text-red-900 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Floating Top Control Bar (Matching Stitch Spec) */}
       <div className="fixed top-20 left-0 w-full z-30 px-4 md:px-10 flex justify-center pointer-events-none">
         <div className="w-full max-w-[1280px] flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pointer-events-auto">
           {/* Quick Filter Pill Row */}
           <div className="flex flex-wrap items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl md:rounded-full border border-[#c6c6cc]/70 shadow-md">
+            {loading && (
+              <div className="w-4 h-4 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin ml-1 shrink-0" />
+            )}
+
             {/* Type selector */}
             <select
               value={filterType}
@@ -282,8 +424,10 @@ export const StartupMap: React.FC<StartupMapProps> = ({
               className="px-3 py-1.5 rounded-full bg-transparent text-[#45464c] text-xs md:text-sm font-medium focus:outline-none cursor-pointer border-none"
             >
               <option value="all">All Areas</option>
-              {areas.map(a => (
-                <option key={a.id} value={a.id}>{a.name}</option>
+              {areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
               ))}
             </select>
 
@@ -330,9 +474,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
 
           {/* Map / Grid View Toggle Button (from Stitch Design) */}
           <div className="flex items-center bg-white/90 backdrop-blur-md p-1 rounded-full border border-[#c6c6cc]/70 shadow-md">
-            <button
-              className="px-4 py-1.5 rounded-full bg-[#1a1f2c] text-white text-xs md:text-sm font-semibold flex items-center gap-1.5 shadow-sm"
-            >
+            <button className="px-4 py-1.5 rounded-full bg-[#1a1f2c] text-white text-xs md:text-sm font-semibold flex items-center gap-1.5 shadow-sm">
               <span className="material-symbols-outlined text-[16px]">map</span>
               Map
             </button>
@@ -341,7 +483,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
               className="px-4 py-1.5 rounded-full bg-transparent text-[#45464c] hover:text-[#030612] hover:bg-[#eae7e8] text-xs md:text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px]">grid_view</span>
-              Grid ({filteredStartups.length})
+              Grid ({geojsonData.features.length})
             </button>
           </div>
         </div>
@@ -398,7 +540,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
               />
               <div>
                 <span className="font-label-caps text-[10px] text-[#545f72] uppercase tracking-wider block">
-                  {selectedStartup.sectors[0]} · {selectedStartup.type}
+                  {selectedStartup.sector} · {selectedStartup.type}
                 </span>
                 <h3 className="font-h3 text-lg font-bold text-[#030612] flex items-center gap-1">
                   {selectedStartup.name}
@@ -412,14 +554,14 @@ export const StartupMap: React.FC<StartupMapProps> = ({
             </div>
             <button
               onClick={() => setSelectedStartup(null)}
-              className="text-[#76777c] hover:text-[#030612] p-1 rounded-full hover:bg-[#f0edee]"
+              className="text-[#76777c] hover:text-[#030612] p-1 rounded-full hover:bg-[#f0edee] cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
 
           <p className="text-xs text-[#45464c] line-clamp-2 leading-relaxed">
-            {selectedStartup.description}
+            {selectedStartup.description || selectedStartup.tagline}
           </p>
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-[#45464c] pt-2 border-t border-[#c6c6cc]/40">
@@ -480,7 +622,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
             <div>
               <h2 className="font-h3 text-base font-bold text-[#030612]">Area Summary</h2>
               <p className="font-metadata text-xs text-[#545f72]">
-                {filteredStartups.length} Startups in view
+                {geojsonData.features.length} Startups in view
               </p>
             </div>
             <button
@@ -493,7 +635,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
 
           {/* Scrollable Startups List */}
           <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5 custom-scrollbar">
-            {filteredStartups.length === 0 ? (
+            {geojsonData.features.length === 0 ? (
               <div className="py-8 text-center text-[#545f72]">
                 <span className="material-symbols-outlined text-3xl mb-1 text-[#c6c6cc]">search_off</span>
                 <p className="text-xs">No startups match active filters</p>
@@ -506,64 +648,68 @@ export const StartupMap: React.FC<StartupMapProps> = ({
                     setHiringOnly(false);
                     setSearchQuery('');
                   }}
-                  className="mt-2 text-xs font-semibold text-[#FF6B35] hover:underline"
+                  className="mt-2 text-xs font-semibold text-[#FF6B35] hover:underline cursor-pointer"
                 >
                   Reset all filters
                 </button>
               </div>
             ) : (
-              filteredStartups.map(startup => (
-                <div
-                  key={startup.id}
-                  onClick={() => {
-                    setSelectedStartup(startup);
-                    mapRef.current?.flyTo({
-                      center: [startup.longitude, startup.latitude],
-                      zoom: 14.5,
-                      speed: 1.2,
-                    });
-                  }}
-                  className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer group ${
-                    selectedStartup?.id === startup.id
-                      ? 'bg-[#f6f3f4] border-[#1a1f2c] shadow-sm'
-                      : 'bg-white border-[#c6c6cc]/40 hover:border-[#1a1f2c]'
-                  }`}
-                >
-                  <img
-                    src={startup.logo}
-                    alt={startup.name}
-                    className="w-10 h-10 rounded-lg bg-[#f0edee] object-cover border border-[#c6c6cc]/40 shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-label-caps text-[9px] text-[#545f72] uppercase truncate">
-                        {startup.sectors[0]}
-                      </span>
-                      {startup.hiring && (
-                        <span className="bg-[#1a1f2c] text-white text-[8px] px-1.5 py-0.2 rounded font-bold">
-                          HIRING
-                        </span>
-                      )}
-                    </div>
-                    <h4 className="font-body-md text-sm font-bold text-[#030612] truncate group-hover:text-[#FF6B35] transition-colors">
-                      {startup.name}
-                    </h4>
-                    <p className="font-metadata text-[11px] text-[#545f72] truncate">
-                      {startup.stage} • {startup.areaName.split(',')[0]}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectStartup(startup.slug);
+              geojsonData.features.map((feature) => {
+                const startup = feature.properties;
+                const isSelected = selectedStartup?.id === startup.id;
+                return (
+                  <div
+                    key={startup.id}
+                    onClick={() => {
+                      setSelectedStartup(startup);
+                      mapRef.current?.flyTo({
+                        center: feature.geometry.coordinates,
+                        zoom: 14.5,
+                        speed: 1.2,
+                      });
                     }}
-                    className="shrink-0 p-1.5 text-[#c6c6cc] group-hover:text-[#030612] transition-colors"
-                    title="Open details"
+                    className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer group ${
+                      isSelected
+                        ? 'bg-[#f6f3f4] border-[#1a1f2c] shadow-sm'
+                        : 'bg-white border-[#c6c6cc]/40 hover:border-[#1a1f2c]'
+                    }`}
                   >
-                    <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                  </button>
-                </div>
-              ))
+                    <img
+                      src={startup.logo}
+                      alt={startup.name}
+                      className="w-10 h-10 rounded-lg bg-[#f0edee] object-cover border border-[#c6c6cc]/40 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-label-caps text-[9px] text-[#545f72] uppercase truncate">
+                          {startup.sector}
+                        </span>
+                        {startup.hiring && (
+                          <span className="bg-[#1a1f2c] text-white text-[8px] px-1.5 py-0.2 rounded font-bold">
+                            HIRING
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-body-md text-sm font-bold text-[#030612] truncate group-hover:text-[#FF6B35] transition-colors">
+                        {startup.name}
+                      </h4>
+                      <p className="font-metadata text-[11px] text-[#545f72] truncate">
+                        {startup.stage} • {startup.areaName.split(',')[0]}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectStartup(startup.slug);
+                      }}
+                      className="shrink-0 p-1.5 text-[#c6c6cc] group-hover:text-[#030612] transition-colors cursor-pointer"
+                      title="Open details"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -577,7 +723,7 @@ export const StartupMap: React.FC<StartupMapProps> = ({
               <h3 className="font-h3 text-xl font-bold text-[#030612]">Filter Noida Atlas</h3>
               <button
                 onClick={() => setShowFilterDrawer(false)}
-                className="p-1 text-[#76777c] hover:text-[#030612] rounded-full"
+                className="p-1 text-[#76777c] hover:text-[#030612] rounded-full cursor-pointer"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -635,11 +781,11 @@ export const StartupMap: React.FC<StartupMapProps> = ({
                 Funding Stage
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {['all', 'Pre-seed', 'Seed', 'Series A', 'Series B', 'Growth'].map(st => (
+                {['all', 'Pre-seed', 'Seed', 'Series A', 'Series B', 'Growth'].map((st) => (
                   <button
                     key={st}
                     onClick={() => setFilterStage(st)}
-                    className={`py-1.5 px-2 text-xs rounded-lg border font-medium transition-colors ${
+                    className={`py-1.5 px-2 text-xs rounded-lg border font-medium transition-colors cursor-pointer ${
                       filterStage.toLowerCase() === st.toLowerCase()
                         ? 'bg-[#1a1f2c] text-white border-[#1a1f2c]'
                         : 'bg-white text-[#45464c] border-[#c6c6cc] hover:bg-[#f6f3f4]'
@@ -685,16 +831,16 @@ export const StartupMap: React.FC<StartupMapProps> = ({
                   setVerifiedOnly(false);
                   setSearchQuery('');
                 }}
-                className="text-xs font-semibold text-[#76777c] hover:text-[#030612] underline"
+                className="text-xs font-semibold text-[#76777c] hover:text-[#030612] underline cursor-pointer"
               >
                 Reset Filters
               </button>
 
               <button
                 onClick={() => setShowFilterDrawer(false)}
-                className="px-5 py-2 rounded-xl bg-[#1a1f2c] text-white text-sm font-semibold hover:bg-[#030612] transition-colors"
+                className="px-5 py-2 rounded-xl bg-[#1a1f2c] text-white text-sm font-semibold hover:bg-[#030612] transition-colors cursor-pointer"
               >
-                Apply Filters ({filteredStartups.length})
+                Apply Filters ({geojsonData.features.length})
               </button>
             </div>
           </div>

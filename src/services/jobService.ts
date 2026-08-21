@@ -1,60 +1,55 @@
-import { Job, JobFilterState } from '../types';
-import { SEED_JOBS } from '../data/seedData';
-import { storageService } from './storageService';
+/**
+ * Job Service
+ *
+ * Frontend service calling the Express API via apiClient.
+ */
 
-const CUSTOM_JOBS_KEY = 'noida_atlas_custom_jobs_v1';
+import { apiClient } from './apiClient';
+import { Job, JobFilterState } from '../types';
 
 export const jobService = {
-  getAllJobs(): Job[] {
-    const custom = storageService.getItem<Job[]>(CUSTOM_JOBS_KEY, []);
-    return [...SEED_JOBS, ...custom];
+  async getAllJobs(): Promise<Job[]> {
+    const res = await apiClient.get<Job[]>('/api/jobs');
+    return res.data;
   },
 
-  getJobById(id: string): Job | undefined {
-    const all = this.getAllJobs();
-    return all.find(j => j.id === id);
+  async getJobById(id: string): Promise<Job | null> {
+    try {
+      const res = await apiClient.get<Job>(`/api/jobs/${encodeURIComponent(id)}`);
+      return res.data;
+    } catch (_err) {
+      return null;
+    }
   },
 
-  getJobsByStartup(startupSlugOrId: string): Job[] {
-    const all = this.getAllJobs();
-    return all.filter(j => j.startupId === startupSlugOrId || j.startupSlug === startupSlugOrId);
+  async getJobsByStartup(startupId: string): Promise<Job[]> {
+    const res = await apiClient.get<Job[]>(`/api/jobs?startup=${encodeURIComponent(startupId)}`);
+    return res.data;
   },
 
-  filterJobs(filters: Partial<JobFilterState>): Job[] {
-    let result = this.getAllJobs();
+  async filterJobs(filters: Partial<JobFilterState>): Promise<Job[]> {
+    const params = new URLSearchParams();
+    if (filters.search?.trim()) params.set('search', filters.search.trim());
+    if (filters.workMode && filters.workMode !== 'all') params.set('workMode', filters.workMode);
+    if (filters.isFresher) params.set('isFresher', 'true');
+    if (filters.isInternship) params.set('isInternship', 'true');
+    if (filters.area && filters.area !== 'all') params.set('area', filters.area);
 
-    if (filters.search && filters.search.trim()) {
-      const q = filters.search.toLowerCase().trim();
-      result = result.filter(j =>
-        j.title.toLowerCase().includes(q) ||
-        j.startupName.toLowerCase().includes(q) ||
-        j.description.toLowerCase().includes(q) ||
-        j.skills.some(sk => sk.toLowerCase().includes(q))
-      );
-    }
-
-    if (filters.workMode && filters.workMode !== 'all') {
-      result = result.filter(j => j.workMode.toLowerCase() === filters.workMode?.toLowerCase());
-    }
-
-    if (filters.isFresher) {
-      result = result.filter(j => j.isFresherFriendly);
-    }
-
-    if (filters.isInternship) {
-      result = result.filter(j => j.isInternship || j.type === 'Internship');
-    }
-
-    if (filters.area && filters.area !== 'all') {
-      result = result.filter(j => j.areaName.toLowerCase().includes(filters.area?.toLowerCase() || ''));
-    }
-
-    return result;
+    const res = await apiClient.get<Job[]>(`/api/jobs?${params.toString()}`);
+    return res.data;
   },
 
-  addJob(job: Job): void {
-    const custom = storageService.getItem<Job[]>(CUSTOM_JOBS_KEY, []);
-    custom.unshift(job);
-    storageService.setItem(CUSTOM_JOBS_KEY, custom);
-  }
+  async addJob(jobData: Omit<Job, 'id'>): Promise<Job> {
+    const res = await apiClient.post<Job>('/api/admin/jobs', jobData);
+    return res.data;
+  },
+
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job> {
+    const res = await apiClient.patch<Job>(`/api/admin/jobs/${id}`, updates);
+    return res.data;
+  },
+
+  async deleteJob(id: string): Promise<void> {
+    await apiClient.delete(`/api/admin/jobs/${id}`);
+  },
 };

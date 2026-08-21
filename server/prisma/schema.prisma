@@ -1,0 +1,376 @@
+// Prisma Schema for Noida Startup Atlas
+// Normalized relational model mapping all TypeScript interfaces
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum StartupType {
+  Startup
+  ScaleUp
+  Unicorn
+  Bootstrapped
+  Public
+}
+
+enum StartupStage {
+  Idea
+  PreSeed
+  Seed
+  SeriesA
+  SeriesB
+  SeriesCPlus
+  Growth
+}
+
+enum InvestorType {
+  VentureCapital
+  AngelSyndicate
+  MicroVC
+  FamilyOffice
+  CorporateVC
+}
+
+enum WorkMode {
+  Remote
+  OnSite
+  Hybrid
+}
+
+enum JobType {
+  FullTime
+  PartTime
+  Contract
+  Internship
+}
+
+enum SubmissionStatus {
+  pending
+  in_review
+  approved
+  rejected
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum BookmarkType {
+  startup
+  job
+  founder
+  investor
+}
+
+enum City {
+  Noida
+  GreaterNoida
+  YamunaExpressway
+}
+
+// ─── Core Models ──────────────────────────────────────────────────────────────
+
+model Area {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  shortName    String
+  city         City
+  description  String   @db.Text
+  latitude     Float
+  longitude    Float
+  popularHubs  String[]
+  topSectors   String[]
+  connectivity String
+
+  startups Startup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([city])
+  @@map("areas")
+}
+
+model Startup {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  name            String
+  tagline         String
+  description     String       @db.Text
+  longDescription String?      @db.Text
+  logo            String
+  website         String
+  foundedYear     Int
+  type            StartupType
+  stage           StartupStage
+  address         String
+  latitude        Float
+  longitude       Float
+  employeeRange   String
+  totalFunding    String
+  techStack       String[]
+  linkedin        String
+  twitter         String?
+  github          String?
+  verified        Boolean      @default(false)
+  hiring          Boolean      @default(false)
+  sectors         String[]
+  jobsCount       Int          @default(0)
+  viewsCount      Int          @default(0)
+
+  areaId String
+  area   Area   @relation(fields: [areaId], references: [id])
+
+  founders      Founder[]
+  fundingRounds FundingRound[]
+  products      Product[]
+  jobs          Job[]
+  bookmarks     Bookmark[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([areaId])
+  @@index([stage])
+  @@index([verified])
+  @@index([hiring])
+  @@index([sectors])
+  @@index([createdAt])
+  @@map("startups")
+}
+
+model Founder {
+  id                String       @id @default(cuid())
+  slug              String       @unique
+  name              String
+  photo             String
+  coverImage        String?
+  role              String
+  bio               String       @db.Text
+  linkedin          String
+  twitter           String?
+  github            String?
+  email             String?
+  sectors           String[]
+  stage             StartupStage
+  location          String
+  areaId            String
+  previousCompanies String[]
+  education         String?
+  skills            String[]
+  verified          Boolean      @default(false)
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([startupId])
+  @@map("founders")
+}
+
+model Investor {
+  id               String       @id @default(cuid())
+  slug             String       @unique
+  name             String
+  logo             String
+  type             InvestorType
+  stages           String[]
+  focusSectors     String[]
+  location         String
+  checkSize        String
+  website          String
+  linkedin         String
+  description      String       @db.Text
+  totalInvestments Int          @default(0)
+
+  portfolioCompanies PortfolioCompany[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@map("investors")
+}
+
+model PortfolioCompany {
+  id     String  @id @default(cuid())
+  name   String
+  slug   String?
+  logo   String?
+  sector String
+
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@map("portfolio_companies")
+}
+
+model FundingRound {
+  id            String @id @default(cuid())
+  roundType     String
+  amount        String
+  date          String
+  valuation     String?
+  leadInvestors String[]
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@map("funding_rounds")
+}
+
+model Product {
+  id          String @id @default(cuid())
+  name        String
+  description String @db.Text
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@map("products")
+}
+
+model Job {
+  id                String   @id @default(cuid())
+  title             String
+  location          String
+  areaName          String
+  workMode          WorkMode
+  type              JobType
+  experience        String
+  salaryRange       String
+  description       String   @db.Text
+  responsibilities  String[]
+  requirements      String[]
+  skills            String[]
+  postedDate        String
+  isFresherFriendly Boolean  @default(false)
+  isInternship      Boolean  @default(false)
+  applyUrl          String?
+  contactEmail      String
+
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startupId])
+  @@map("jobs")
+}
+
+model Submission {
+  id              String           @id @default(cuid())
+  companyName     String
+  tagline         String
+  website         String
+  foundedYear     Int
+  type            StartupType
+  stage           StartupStage
+  sector          String
+  areaId          String
+  areaName        String
+  address         String
+  founderName     String
+  founderRole     String
+  founderEmail    String
+  founderLinkedin String
+  employeeRange   String
+  totalFunding    String
+  description     String           @db.Text
+  techStack       String
+  hiring          Boolean          @default(false)
+  status          SubmissionStatus @default(pending)
+  notes           String?          @db.Text
+
+  submittedAt DateTime @default(now())
+  reviewedAt  DateTime?
+
+  @@index([status])
+  @@map("submissions")
+}
+
+// ─── Auth & User Models ───────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(user)
+
+  bookmarks Bookmark[]
+  sessions  Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Bookmark {
+  id     String       @id @default(cuid())
+  type   BookmarkType
+  itemId String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startupId String?
+  startup   Startup? @relation(fields: [startupId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, type, itemId])
+  @@index([userId])
+  @@map("bookmarks")
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  eventType  String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  sessionId  String?
+  ip         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("analytics_events")
+}
